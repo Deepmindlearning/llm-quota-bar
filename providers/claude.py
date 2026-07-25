@@ -237,7 +237,7 @@ def _oauth_fetch() -> Snapshot | None:
     data = resp.json()
     snap = Snapshot(provider="Claude", ok=True)
     for key, w in data.items():
-        if not isinstance(w, dict) or "utilization" not in w:
+        if not isinstance(w, dict) or w.get("utilization") is None:
             continue
         used = w.get("utilization")
         resets = w.get("resets_at")
@@ -350,32 +350,47 @@ class ClaudeProvider(Provider):
         except OSError:
             pass
 
+        # 上游路径失败不中断，记下原因继续降级，附到最终结果的 extra 里
+        upstream_errors: list[str] = []
+
         try:
             snap = _claude_ai_cookie_fetch(cfg)
-            if snap is not None:
+        except httpx.HTTPError as e:
+            snap = None
+            upstream_errors.append(f"claude.ai 不可达: {type(e).__name__}")
+        if snap is not None:
+            if snap.ok:
                 if records:
                     snap.extra.extend(_model_extras(records))
                 return snap
-        except httpx.HTTPError as e:
-            net_err = e
-        else:
-            net_err = None
+            upstream_errors.append(snap.error)
 
         snap = _statusline_fetch(records or [])
         if snap is not None:
+            snap.extra.extend(upstream_errors)
             return snap
+
         try:
             snap = _oauth_fetch()
-            if snap is not None:
+        except httpx.HTTPError as e:
+            snap = None
+            upstream_errors.append(f"OAuth usage 不可达: {type(e).__name__}")
+        if snap is not None:
+            if snap.ok:
                 if records:
                     snap.extra.extend(_model_extras(records))
+                snap.extra.extend(upstream_errors)
                 return snap
-        except httpx.HTTPError:
-            pass
+            upstream_errors.append(snap.error)
+
         local = _local_estimate(records)
         cookie = (cfg.get("claude") or {}).get("cookie")
-        if net_err is not None:
-            local.extra.append(f"claude.ai 不可达: {type(net_err).__name__}")
-        elif not cookie or not cookie.isascii():
+        if not local.ok:
+            # 本地兜底也失败：把上游失败原因并入错误信息
+            if upstream_errors:
+                local.error = "; ".join([local.error, *upstream_errors])
+            return local
+        if not upstream_errors and (not cookie or not cookie.isascii()):
             local.extra.append("仅 CLI 口径（配 claude.ai cookie 可看全端总用量）")
+        local.extra.extend(upstream_errors)
         return local

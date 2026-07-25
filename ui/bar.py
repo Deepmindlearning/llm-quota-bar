@@ -142,6 +142,7 @@ class MonitorBar(QWidget):
         self.snapshots: dict[str, Snapshot] = {}
         self.paused = False
         self.alerted: set[str] = set()   # "provider|label" 已告警集合
+        self.last_error: dict[str, str] = {}  # 保留旧数据展示时，最近一次抓取失败原因
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -204,7 +205,15 @@ class MonitorBar(QWidget):
             self.threadpool.start(w)
 
     def on_result(self, name: str, snap: Snapshot):
-        self.snapshots[name] = snap
+        prev = self.snapshots.get(name)
+        if not snap.ok and prev is not None and prev.ok:
+            # 抓取失败但手里有旧的成功数据：保留旧数据（随 fetched_at 变旧自动置灰），
+            # 失败原因记入 last_error 供 tooltip/明细展示——旧数据比"!"信息量大
+            self.last_error[name] = snap.error
+        else:
+            self.snapshots[name] = snap
+            if snap.ok:
+                self.last_error.pop(name, None)
         self.update_cell(name)
         if self.detail_for == name:
             self.render_detail(name)
@@ -234,6 +243,9 @@ class MonitorBar(QWidget):
             tip = time.strftime("更新于 %H:%M:%S", time.localtime(snap.fetched_at))
             if stale:
                 tip += "（数据陈旧）"
+            err = self.last_error.get(name)
+            if err:
+                tip += f"\n最近抓取失败: {err}"
             cell.setToolTip(tip)
         cell.ring.update()
 
@@ -265,7 +277,7 @@ class MonitorBar(QWidget):
         if not snap:
             return
         # 数据没变就只刷新倒计时文字，不重建控件（避免闪烁与控件泄漏）
-        key = (name, snap.fetched_at, snap.ok, snap.error,
+        key = (name, snap.fetched_at, snap.ok, snap.error, self.last_error.get(name),
                tuple((w.label, w.used_percent, w.detail) for w in snap.windows),
                tuple(snap.extra))
         if key == getattr(self, "_render_key", None):
@@ -311,6 +323,12 @@ class MonitorBar(QWidget):
             e = QLabel(line)
             e.setWordWrap(True)
             e.setStyleSheet("color: #999; background: transparent; font-size: 11px;")
+            self.detail_lay.addWidget(e)
+        err = self.last_error.get(name)
+        if err:
+            e = QLabel(f"最近抓取失败: {err}")
+            e.setWordWrap(True)
+            e.setStyleSheet("color: #f44336; background: transparent; font-size: 11px;")
             self.detail_lay.addWidget(e)
         ts = QLabel(time.strftime("更新于 %H:%M:%S", time.localtime(snap.fetched_at)))
         ts.setStyleSheet("color: #777; background: transparent; font-size: 10px;")
