@@ -6,3 +6,10 @@ dependencies = [
     "httpx>=0.28.1",
     "pyside6>=6.11.1",
 ]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.61.0",
+    "pymupdf>=1.28.0",
+    "reportlab>=5.0.0",
+]
