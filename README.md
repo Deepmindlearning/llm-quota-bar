@@ -1,6 +1,6 @@
 # llm-quota-bar — LLM 会员余量桌面悬浮条
 
-Windows 桌面悬浮条 + 系统托盘，同屏监视多家 LLM **会员订阅配额 / 积分**的剩余量。
+Windows / macOS 桌面悬浮条 + 系统托盘，同屏监视多家 LLM **会员订阅配额 / 积分**的剩余量。
 
 ![screenshot](docs/screenshot.png)
 
@@ -26,6 +26,8 @@ uv run python main.py --once     # 无界面抓一轮打印（调试用，不输
 ```
 
 Windows 下可直接双击 `启动悬浮条.bat`（无控制台窗口后台常驻）。开机自启：`Win+R` → `shell:startup` → 放入该 bat 的快捷方式。
+
+macOS 下双击 `启动悬浮条.command`（注意改成你本机的实际路径）；首次打开若被 Gatekeeper 拦截，右键 → 打开。悬浮条在 macOS 上已适配失焦常驻（`WA_MacAlwaysShowToolWindow`），托盘气泡通知需系统通知权限。
 
 ## 界面
 
@@ -73,7 +75,7 @@ Cookie 失效后对应格子会提示"登录态失效"，重新复制即可；�
 
 ## English
 
-A Windows desktop floating bar + system tray that watches your remaining **subscription quotas** across LLM providers: Claude (claude.ai official usage, all surfaces incl. per-model weekly windows like Fable), Kimi Code (weekly + 5h windows), ChatGPT/Codex (rate-limit windows), and Grok/SuperGrok (grok.com rate-limit windows via cookie, CLI OAuth billing fallback). Aliyun Bailian Coding Plan provider included but disabled by default; a dormant Qoder CN provider (`providers/qoder.py`) can be re-enabled in `main.py`.
+A Windows / macOS desktop floating bar + system tray that watches your remaining **subscription quotas** across LLM providers: Claude (claude.ai official usage, all surfaces incl. per-model weekly windows like Fable), Kimi Code (weekly + 5h windows), ChatGPT/Codex (rate-limit windows), and Grok/SuperGrok (weekly usage-pool window via the Grok CLI credits endpoint). Aliyun Bailian Coding Plan provider included but disabled by default; a dormant Qoder CN provider (`providers/qoder.py`) can be re-enabled in `main.py`.
 
 - Per-provider cells show remaining % of the tightest window; click a cell for per-window details and reset countdowns; tray alerts at 80% usage.
 - Credentials are read at runtime from each vendor's local CLI credential files (auto-refreshed and atomically written back); only Claude/Grok need a one-time browser cookie in `config.local.toml` (gitignored).

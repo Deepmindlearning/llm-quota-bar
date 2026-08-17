@@ -137,6 +137,8 @@ class MonitorBar(QWidget):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        # macOS 下 Tool 窗口在应用失去焦点时会被系统自动隐藏,此属性让它常驻(其他平台无效果)
+        self.setAttribute(Qt.WA_MacAlwaysShowToolWindow)
         self.cfg = cfg
         self.providers = {p.name: p for p in providers}
         self.snapshots: dict[str, Snapshot] = {}
