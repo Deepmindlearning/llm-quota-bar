@@ -14,13 +14,16 @@ from core.models import Snapshot
 from providers.base import Provider
 from providers.chatgpt import ChatGPTProvider
 from providers.claude import ClaudeProvider
+from providers.grok import GrokProvider
 from providers.kimi import KimiProvider
-from providers.qoder import QoderProvider
 from providers.qwen import QwenProvider
+
+# Qoder 暂停使用（2026-08-17 起）：恢复时在上方加回
+# `from providers.qoder import QoderProvider` 并放进下面列表即可，providers/qoder.py 保留未删。
 
 
 def build_providers(cfg: dict | None = None) -> list[Provider]:
-    providers: list[Provider] = [ClaudeProvider(), KimiProvider(), ChatGPTProvider(), QoderProvider()]
+    providers: list[Provider] = [ClaudeProvider(), KimiProvider(), ChatGPTProvider(), GrokProvider()]
     # 百炼 Coding Plan 按需启用（config.local.toml 里 [qwen] enabled = true）
     if (cfg or {}).get("qwen", {}).get("enabled"):
         providers.append(QwenProvider())

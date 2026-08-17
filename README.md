@@ -9,7 +9,9 @@ Windows 桌面悬浮条 + 系统托盘，同屏监视多家 LLM **会员订阅�
 | Claude | `claude.ai` 官方 usage 接口（**全端总用量**：桌面 App / 网页 / CLI，含 Current session / All models / Fable 等分模型窗口）→ Claude Code statusline → OAuth usage API → 本地日志估算兜底；另附近 7 天分模型 token 分布 | cookie（见下）；CLI 路径全自动 |
 | Kimi Code | `api.kimi.com/coding/v1/usages`（官方 CLI 同源端点） | 自动读 `~/.kimi-code/credentials/kimi-code.json`，过期自动刷新写回 |
 | ChatGPT (Codex) | `chatgpt.com/backend-api/wham/usage`（Codex CLI 同款端点） | 自动读 `~/.codex/auth.json`，401 自动刷新写回 |
-| Qoder CN 积分 | `qoder.com.cn/api/v2/me/usages/big_model_credits`（官网"账户→用量"页同源接口） | cookie（见下） |
+| Grok (SuperGrok) | `cli-chat-proxy.grok.com/v1/billing?format=credits`（订阅用量池周/月窗百分比，CodexBar 同款逆向）+ `/v1/settings` 取档位名 | 自动读 `~/.grok/auth.json`，过期自动刷新写回 |
+
+Qoder CN 已暂停使用（2026-08-17 起）：`providers/qoder.py` 保留未删，恢复时在 `main.py` 里加回 import 与列表即可。
 
 另有 `providers/qwen.py`（阿里云百炼 Coding Plan 控制台 RPC，含 sec_token 流程，链路已验证）：默认关闭，订阅了该套餐的话在 `config.local.toml` 的 `[qwen]` 里加 `enabled = true` 即可出现第五格。
 
@@ -39,9 +41,10 @@ Windows 下可直接双击 `启动悬浮条.bat`（无控制台窗口后台常�
 [claude]
 cookie = '...'
 
-# Qoder CN：浏览器登录 qoder.com.cn/account/usage，同样方法复制 Cookie 头
-[qoder]
-cookie = '...'
+# Grok：浏览器登录 grok.com，同样方法复制 Cookie 头（需含 cf_clearance）；
+# 不配则 Grok 格只显示 CLI 登录态/账期兜底
+# [grok]
+# cookie = '...'
 
 # 可选：Kimi Console API Key（不配则自动用 CLI 登录态）
 # [kimi]
@@ -70,10 +73,10 @@ Cookie 失效后对应格子会提示"登录态失效"，重新复制即可；�
 
 ## English
 
-A Windows desktop floating bar + system tray that watches your remaining **subscription quotas** across LLM providers: Claude (claude.ai official usage, all surfaces incl. per-model weekly windows like Fable), Kimi Code (weekly + 5h windows), ChatGPT/Codex (rate-limit windows), and Qoder CN credits. Aliyun Bailian Coding Plan provider included but disabled by default.
+A Windows desktop floating bar + system tray that watches your remaining **subscription quotas** across LLM providers: Claude (claude.ai official usage, all surfaces incl. per-model weekly windows like Fable), Kimi Code (weekly + 5h windows), ChatGPT/Codex (rate-limit windows), and Grok/SuperGrok (grok.com rate-limit windows via cookie, CLI OAuth billing fallback). Aliyun Bailian Coding Plan provider included but disabled by default; a dormant Qoder CN provider (`providers/qoder.py`) can be re-enabled in `main.py`.
 
 - Per-provider cells show remaining % of the tightest window; click a cell for per-window details and reset countdowns; tray alerts at 80% usage.
-- Credentials are read at runtime from each vendor's local CLI credential files (auto-refreshed and atomically written back); only Claude/Qoder need a one-time browser cookie in `config.local.toml` (gitignored).
+- Credentials are read at runtime from each vendor's local CLI credential files (auto-refreshed and atomically written back); only Claude/Grok need a one-time browser cookie in `config.local.toml` (gitignored).
 - All traffic is read-only usage queries — no inference calls. Endpoints are unofficial-but-widely-used (same ones as CodexBar/cc-switch); a failing endpoint only greys out its own cell.
 
 Built with Python + PySide6, managed by uv. `python main.py --once` prints a credential-free summary for debugging.
