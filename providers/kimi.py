@@ -13,7 +13,7 @@ import httpx
 
 from core.config import HTTP_TIMEOUT, atomic_write_json, home, read_json
 from core.models import Snapshot, UsageWindow
-from providers.base import Provider
+from providers.base import Provider, sub_status_line
 
 USAGE_URL = "https://api.kimi.com/coding/v1/usages"
 TOKEN_URL = "https://auth.kimi.com/api/oauth/token"
@@ -134,8 +134,16 @@ def _parse(data: dict) -> Snapshot:
 
 class KimiProvider(Provider):
     name = "Kimi"
+    # Allegro ¥699/月：2026-07-19 开订按月滚，08-25 已关自动续费，已付周期约至 09-19（约数，以官网账号页为准）
+    SUB_EXPIRES = "2026-09-19"
 
     def fetch(self, cfg: dict) -> Snapshot:
+        # 无论成败都附上订阅到期状态行——到期后接口报错恰是常态，这行就是原因说明
+        snap = self._fetch(cfg)
+        snap.extra.append(sub_status_line(self.SUB_EXPIRES, "已关自动续费"))
+        return snap
+
+    def _fetch(self, cfg: dict) -> Snapshot:
         api_key = (cfg.get("kimi") or {}).get("api_key")
         try:
             if api_key:

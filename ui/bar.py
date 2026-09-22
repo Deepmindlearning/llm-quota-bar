@@ -295,6 +295,12 @@ class MonitorBar(QWidget):
             err.setWordWrap(True)
             err.setStyleSheet("color: #f44336; background: transparent;")
             self.detail_lay.addWidget(err)
+            # 附加信息(如订阅到期行)失败时也要显示——订阅到期后接口报错恰是常态,这行就是原因说明
+            for line in snap.extra:
+                e = QLabel(line)
+                e.setWordWrap(True)
+                e.setStyleSheet("color: #999; background: transparent; font-size: 11px;")
+                self.detail_lay.addWidget(e)
             return
         self._countdown_refs = []
         for w in snap.windows:
