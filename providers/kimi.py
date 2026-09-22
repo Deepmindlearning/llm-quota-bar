@@ -74,6 +74,11 @@ def _num(x):
 
 def _parse(data: dict) -> Snapshot:
     snap = Snapshot(provider="Kimi", ok=True)
+    if not data:
+        # 会员到期后接口返回空对象 {}（2026-09-22 实测）：视为未订阅，不再造一个"周 未知"的空窗口
+        snap.subscribed = False
+        snap.extra.append("无有效会员（接口返回空）")
+        return snap
 
     def window_from(d: dict, fallback_label: str) -> UsageWindow | None:
         if not isinstance(d, dict):
@@ -120,6 +125,7 @@ def _parse(data: dict) -> Snapshot:
     level = ((user.get("membership") or {}).get("level") or "").replace("LEVEL_", "")
     if level:
         snap.extra.append(f"会员: {level}")
+        snap.subscribed = "FREE" not in level.upper()
 
     wallet = data.get("boosterWallet")
     if isinstance(wallet, dict):

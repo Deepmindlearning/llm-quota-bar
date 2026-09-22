@@ -29,6 +29,8 @@ class Snapshot:
     extra: list[str] = field(default_factory=list)   # 附加信息行（加量包、plan 类型等）
     error: str = ""
     fetched_at: float = field(default_factory=time.time)
+    # 付费订阅是否有效：True=有；False=免费版/已停订（悬浮条默认隐藏该格）；None=接口未给出（照常显示）
+    subscribed: bool | None = None
 
     @property
     def headline_used(self) -> float | None:
@@ -48,4 +50,6 @@ class Snapshot:
             parts.append(s)
         if self.extra:
             parts.extend(self.extra)
+        if self.subscribed is False:
+            parts.append("未订阅（悬浮条默认隐藏）")
         return f"[{self.provider}] " + "; ".join(parts)

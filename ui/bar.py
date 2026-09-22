@@ -5,7 +5,7 @@ import time
 
 from PySide6.QtCore import QObject, QPoint, QRunnable, Qt, QThreadPool, QTimer, Signal
 from PySide6.QtGui import QColor, QMouseEvent, QPainter, QPen
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLayout, QProgressBar, QVBoxLayout, QWidget
 
 from core.models import Snapshot
 from providers.base import Provider
@@ -145,10 +145,13 @@ class MonitorBar(QWidget):
         self.paused = False
         self.alerted: set[str] = set()   # "provider|label" 已告警集合
         self.last_error: dict[str, str] = {}  # 保留旧数据展示时，最近一次抓取失败原因
+        # 未订阅（免费版 / 已停订）的家默认隐藏，只留开了付费计划的；config.local.toml [ui] hide_unsubscribed = false 可关
+        self.hide_unsubscribed = bool((cfg.get("ui") or {}).get("hide_unsubscribed", True))
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(4)
+        outer.setSizeConstraint(QLayout.SetFixedSize)  # 格子隐藏 / 出现时窗口随内容收缩、伸展
 
         row = QHBoxLayout()
         row.setSpacing(6)
@@ -217,10 +220,35 @@ class MonitorBar(QWidget):
             if snap.ok:
                 self.last_error.pop(name, None)
         self.update_cell(name)
+        self.apply_visibility(name)
         if self.detail_for == name:
             self.render_detail(name)
         self.check_alerts(name, snap)
         self.tray.refresh_icon(self.snapshots)
+
+    # ---- 未订阅自动隐藏 ----
+    def is_unsubscribed(self, name: str) -> bool:
+        snap = self.snapshots.get(name)
+        return snap is not None and snap.subscribed is False
+
+    def apply_visibility(self, name: str):
+        """未订阅的格按开关隐藏 / 显示；正展开明细的格被隐藏时顺带收起明细。"""
+        cell = self.cells[name]
+        hidden = self.hide_unsubscribed and self.is_unsubscribed(name)
+        if cell.isHidden() == hidden:
+            return
+        cell.setVisible(not hidden)
+        if hidden and self.detail_for == name:
+            self.detail.hide()
+            self.detail_for = None
+        self.adjustSize()
+
+    def set_hide_unsubscribed(self, flag: bool) -> bool:
+        self.hide_unsubscribed = bool(flag)
+        for name in self.cells:
+            self.apply_visibility(name)
+        self.tray.refresh_icon(self.snapshots)
+        return self.hide_unsubscribed
 
     # ---- 显示 ----
     def update_cell(self, name: str):
@@ -357,8 +385,8 @@ class MonitorBar(QWidget):
 
     # ---- 告警 ----
     def check_alerts(self, name: str, snap: Snapshot):
-        if not snap.ok:
-            return
+        if not snap.ok or snap.subscribed is False:
+            return  # 未订阅的家（如免费版 ChatGPT 的月窗）不弹告警
         for w in snap.windows:
             if w.used_percent is None:
                 continue

@@ -235,9 +235,13 @@ def _billing_fetch() -> Snapshot:
     try:
         sresp = httpx.get(SETTINGS_URL, headers=headers, timeout=5.0)
         if sresp.status_code == 200:
-            tier = (sresp.json() or {}).get("subscription_tier_display")
-            if tier:
-                snap.extra.append(f"套餐: {tier}")
+            sdata = sresp.json() or {}
+            if "subscription_tier_display" in sdata:
+                tier = str(sdata.get("subscription_tier_display") or "").strip()
+                # 档位名为空或 Free → 未订阅（免费档同样能拿到 billing 周窗，不能靠它判断）；SuperGrok/Heavy 等 → 有效
+                snap.subscribed = bool(tier) and tier.lower() != "free"
+                if tier:
+                    snap.extra.append(f"套餐: {tier}")
     except (httpx.HTTPError, ValueError):
         pass  # 档位名只是点缀，失败不降级
     return snap

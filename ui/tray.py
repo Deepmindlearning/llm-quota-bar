@@ -19,6 +19,10 @@ class TrayIcon(QSystemTrayIcon):
         act_refresh.triggered.connect(lambda: bar.refresh())
         self.act_pause = menu.addAction("暂停刷新")
         self.act_pause.triggered.connect(self._toggle_pause)
+        self.act_show_unsub = menu.addAction("显示未订阅的格")
+        self.act_show_unsub.setCheckable(True)
+        self.act_show_unsub.setChecked(not bar.hide_unsubscribed)
+        self.act_show_unsub.toggled.connect(lambda checked: bar.set_hide_unsubscribed(not checked))
         menu.addSeparator()
         act_quit = menu.addAction("退出")
         act_quit.triggered.connect(QGuiApplication.quit)
@@ -42,7 +46,9 @@ class TrayIcon(QSystemTrayIcon):
         self.setIcon(self._make_icon(snapshots))
         parts = []
         for name, snap in snapshots.items():
-            if snap.ok and snap.headline_used is not None:
+            if snap.subscribed is False:
+                parts.append(f"{name} 未订阅" + ("（已隐藏）" if self.bar.hide_unsubscribed else ""))
+            elif snap.ok and snap.headline_used is not None:
                 parts.append(f"{name} 剩 {100 - snap.headline_used:.0f}%")
             elif not snap.ok:
                 parts.append(f"{name} 异常")
@@ -61,7 +67,9 @@ class TrayIcon(QSystemTrayIcon):
         rects = [(0, 0), (16, 0), (0, 16), (16, 16)]
         for i, name in enumerate(names[:4]):
             snap = snapshots.get(name)
-            if snap and snap.ok and snap.headline_used is not None:
+            if snap and snap.subscribed is False:
+                color = QColor("#3a3a3e")   # 未订阅：暗格
+            elif snap and snap.ok and snap.headline_used is not None:
                 color = QColor(level_color(100 - snap.headline_used))
             elif snap and not snap.ok:
                 color = QColor("#f44336")

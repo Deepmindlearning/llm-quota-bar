@@ -97,6 +97,8 @@ def _parse(data: dict) -> Snapshot:
         snap.extra.append(f"credits ${credits.get('balance')}")
     if plan:
         snap.extra.append(f"plan: {plan}")
+        # plan_type=free（未订阅 Plus 时的实测值，2026-09-22）→ 未订阅；其余（plus/pro/team…）视为有效订阅
+        snap.subscribed = str(plan).strip().lower() != "free"
     if not snap.windows:
         return Snapshot(provider="ChatGPT", error="返回结构无法识别（接口可能已变更）")
     return snap

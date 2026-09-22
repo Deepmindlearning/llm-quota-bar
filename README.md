@@ -34,6 +34,7 @@ macOS 下双击 `启动悬浮条.command`（注意改成你本机的实际路径
 - 四格各显示一家**最紧张窗口的剩余百分比**，环形进度，绿 >50% / 橙 20–50% / 红 <20%。
 - 拖动任意格子移动位置；**点击格子**展开/收起明细（各窗口余量、重置倒计时、附加信息、最后更新时间）。
 - Kimi / ChatGPT 格明细带**订阅到期倒计时**（两家 2026-08-25 已关自动续费：Kimi 约至 2026-09-19、ChatGPT 约至 2026-09-17，以官网账号页为准；到期后显示"已停订"，接口报错时该行同样可见）。
+- **未订阅的家自动隐藏**：按各家接口返回的套餐判断（ChatGPT `plan_type=free`、Grok 档位为 Free、Kimi 会员到期后接口返回空），免费版 / 已停订的格默认不显示，重新订阅后下一轮抓取自动回来；托盘菜单"显示未订阅的格"可临时显示；`config.local.toml` 里 `[ui] hide_unsubscribed = false` 可整体关闭。
 - 数据超过 15 分钟未更新置灰；任一窗口用量 ≥80% 托盘气泡告警（回落到 70% 以下重置）。
 - 托盘图标四象限对应四家颜色；右键菜单：立即刷新 / 暂停刷新 / 退出；左键点图标显隐悬浮条。
 
@@ -52,6 +53,10 @@ cookie = '...'
 # 可选：Kimi Console API Key（不配则自动用 CLI 登录态）
 # [kimi]
 # api_key = "sk-kimi-..."   # https://www.kimi.com/code/console 里创建
+
+# 可选：不隐藏未订阅的家（默认 true = 隐藏免费版 / 已停订的格）
+# [ui]
+# hide_unsubscribed = false
 
 # 可选：百炼 Coding Plan（默认关闭）
 # [qwen]
@@ -79,6 +84,7 @@ Cookie 失效后对应格子会提示"登录态失效"，重新复制即可；�
 A Windows / macOS desktop floating bar + system tray that watches your remaining **subscription quotas** across LLM providers: Claude (claude.ai official usage, all surfaces incl. per-model weekly windows like Fable), Kimi Code (weekly + 5h windows), ChatGPT/Codex (rate-limit windows), and Grok/SuperGrok (weekly usage-pool window via the Grok CLI credits endpoint). Aliyun Bailian Coding Plan provider included but disabled by default; a dormant Qoder CN provider (`providers/qoder.py`) can be re-enabled in `main.py`.
 
 - Per-provider cells show remaining % of the tightest window; click a cell for per-window details and reset countdowns; tray alerts at 80% usage.
+- Providers reporting no paid plan (free tier / lapsed subscription, e.g. ChatGPT `plan_type=free`) are hidden automatically and reappear once you subscribe again; the tray menu can reveal them, and `[ui] hide_unsubscribed = false` disables the behaviour.
 - Credentials are read at runtime from each vendor's local CLI credential files (auto-refreshed and atomically written back); only Claude/Grok need a one-time browser cookie in `config.local.toml` (gitignored).
 - All traffic is read-only usage queries — no inference calls. Endpoints are unofficial-but-widely-used (same ones as CodexBar/cc-switch); a failing endpoint only greys out its own cell.
 
