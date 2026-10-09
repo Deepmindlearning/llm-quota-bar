@@ -16,7 +16,9 @@ from __future__ import annotations
 
 import json
 import math
+import threading
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -68,50 +70,93 @@ def _model_family(model: str) -> str:
     return "其他"
 
 
-def _iter_records(cutoff: float):
-    """产出 (ts, total_tokens, dedup_key, model)，只读近 LEARN_DAYS 天改动的文件。"""
-    projects = home() / ".claude" / "projects"
-    if not projects.is_dir():
-        return
-    for f in projects.rglob("*.jsonl"):
-        try:
-            if f.stat().st_mtime < cutoff:
+@dataclass
+class _FileState:
+    """单个会话日志的增量读取进度。JSONL 只追加，按字节偏移续读。"""
+    size: int = 0
+    mtime: float = 0.0
+    offset: int = 0                      # 已解析到的位置，总落在换行符之后
+    latest: dict[str, tuple[float, int, str]] = field(default_factory=dict)  # 去重键 -> (ts, total, model)
+
+
+# 跨轮缓存：只读新增字节，避免每轮整份重读近 8 天日志（2026-10-09 实测 337 个文件 1.67 GB/轮）
+_FILE_STATES: dict[Path, _FileState] = {}
+_STATE_LOCK = threading.Lock()           # 托盘"立即刷新"可能与定时轮询并发
+
+
+def _parse_line(line: bytes) -> tuple[str, float, int, str] | None:
+    if b'"usage"' not in line:
+        return None
+    try:
+        rec = json.loads(line.decode("utf-8", errors="replace"))
+    except json.JSONDecodeError:
+        return None
+    if rec.get("type") != "assistant":
+        return None
+    msg = rec.get("message") or {}
+    usage = msg.get("usage")
+    if not usage:
+        return None
+    ts = _parse_ts(rec.get("timestamp", ""))
+    if ts is None:
+        return None
+    total = sum(int(usage.get(k) or 0) for k in TOKEN_KEYS)
+    return f"{msg.get('id')}|{rec.get('requestId')}", ts, total, msg.get("model") or ""
+
+
+def _update_file(path: Path, size: int, mtime: float, state: _FileState | None) -> _FileState:
+    """未变化直接复用；变长从上次偏移续读；变短或原地改写则从头重读。"""
+    if state is not None and size == state.size and mtime == state.mtime:
+        return state
+    if state is None or size <= state.size:
+        state = _FileState()
+    with open(path, "rb") as fh:
+        fh.seek(state.offset)
+        pos = state.offset
+        for line in fh:
+            if not line.endswith(b"\n"):
+                break                    # 末行还在写，留到下一轮
+            pos += len(line)
+            item = _parse_line(line)
+            if item is None:
                 continue
-        except OSError:
-            continue
-        try:
-            with open(f, encoding="utf-8", errors="replace") as fh:
-                for line in fh:
-                    if '"usage"' not in line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except json.JSONDecodeError:
-                        continue
-                    if rec.get("type") != "assistant":
-                        continue
-                    msg = rec.get("message") or {}
-                    usage = msg.get("usage")
-                    if not usage:
-                        continue
-                    ts = _parse_ts(rec.get("timestamp", ""))
-                    if ts is None:
-                        continue
-                    total = sum(int(usage.get(k) or 0) for k in TOKEN_KEYS)
-                    key = f"{msg.get('id')}|{rec.get('requestId')}"
-                    yield ts, total, key, msg.get("model") or ""
-        except OSError:
-            continue
+            key, ts, total, model = item
+            prev = state.latest.get(key)
+            if prev is None or ts >= prev[0]:
+                state.latest[key] = (ts, total, model)
+    state.offset, state.size, state.mtime = pos, size, mtime
+    return state
 
 
 def _dedup_records() -> list[tuple[float, int, str]]:
-    """按 message.id+requestId 去重（流式 chunk 的 usage 是累计值，取最后一次）。"""
+    """近 LEARN_DAYS 天改动过的会话日志，按 message.id+requestId 去重（流式 chunk 的 usage 是累计值，取最后一次）。"""
+    projects = home() / ".claude" / "projects"
+    if not projects.is_dir():
+        return []
     cutoff = time.time() - LEARN_DAYS * 86400
-    latest: dict[str, tuple[float, int, str]] = {}
-    for ts, total, key, model in _iter_records(cutoff):
-        prev = latest.get(key)
-        if prev is None or ts >= prev[0]:
-            latest[key] = (ts, total, model)
+    with _STATE_LOCK:
+        seen: set[Path] = set()
+        for f in projects.rglob("*.jsonl"):
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            if st.st_mtime < cutoff:
+                continue
+            seen.add(f)
+            try:
+                _FILE_STATES[f] = _update_file(f, st.st_size, st.st_mtime, _FILE_STATES.get(f))
+            except OSError:
+                continue
+        for f in list(_FILE_STATES):
+            if f not in seen:
+                del _FILE_STATES[f]      # 滑出 8 天窗口或已删除
+        latest: dict[str, tuple[float, int, str]] = {}
+        for state in _FILE_STATES.values():
+            for key, rec in state.latest.items():
+                prev = latest.get(key)
+                if prev is None or rec[0] >= prev[0]:
+                    latest[key] = rec
     return sorted(latest.values())
 
 
